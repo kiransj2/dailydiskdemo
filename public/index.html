@@ -31,14 +31,43 @@
   </header>
 
   <main class="wrap">
-    <section class="hero" aria-labelledby="hero-heading">
-      <div class="hero-copy">
-        <p class="hero-note"><span data-icon="sprout"></span> HOME-STYLE, EVERY DAY</p>
-        <h1 id="hero-heading">Good food.<br>Made for every day.</h1>
-        <p class="hero-desc">Your preorders help us shop smart and cook in one batch. That means balanced meals at everyday prices.</p>
-        <button type="button" class="hero-link" data-action="how">How preordering works <span data-icon="arrow"></span></button>
+    <section class="hero" id="highlights" aria-label="DailyDish highlights" aria-roledescription="carousel">
+      <div class="hero-slide current" role="group" aria-roledescription="slide" aria-label="1 of 3">
+        <div class="hero-copy">
+          <p class="hero-note"><span data-icon="sprout"></span> HOME-STYLE, EVERY DAY</p>
+          <h1 class="hero-title">Good food.<br>Made for every day.</h1>
+          <p class="hero-desc">Your preorders help us shop smart and cook in one batch. That means balanced meals at everyday prices.</p>
+          <button type="button" class="hero-link" data-action="how">How preordering works <span data-icon="arrow"></span></button>
+        </div>
+        <img src="/images/hero.webp" alt="Golden rice, fresh herbs, rotis, and dal on a rustic table" width="1120" height="747" fetchpriority="high">
       </div>
-      <img src="/images/hero.webp" alt="Golden rice, fresh herbs, rotis, and dal on a rustic table" width="1120" height="747" fetchpriority="high">
+      <div class="hero-slide hero-nutrition" role="group" aria-roledescription="slide" aria-label="2 of 3" aria-hidden="true" inert>
+        <div class="hero-copy">
+          <p class="hero-note"><span data-icon="leaf"></span> PROTEIN &amp; FIBER</p>
+          <h2 class="hero-title">Know what’s<br>in your meal.</h2>
+          <p class="hero-desc">See protein and fiber for each portion and for everything you add to your cart.</p>
+          <a class="hero-link" href="#menu">Browse the menu <span data-icon="arrow"></span></a>
+        </div>
+        <img src="/images/harvest.webp" alt="Chickpeas, roasted vegetables, and brown rice in a bowl" width="506" height="506">
+      </div>
+      <div class="hero-slide hero-sharing" role="group" aria-roledescription="slide" aria-label="3 of 3" aria-hidden="true" inert>
+        <div class="hero-copy">
+          <p class="hero-note"><span data-icon="dish"></span> SHARING PACKS</p>
+          <h2 class="hero-title">A little extra<br>for the table.</h2>
+          <p class="hero-desc">Preorder selected dishes in sharing packs from 500 g to 5 kg.</p>
+          <a class="hero-link" href="#menu">Browse the menu <span data-icon="arrow"></span></a>
+        </div>
+        <img src="/images/biryani.webp" alt="Chicken dum biryani with a bowl of raita" width="506" height="506">
+      </div>
+      <div class="hero-controls" role="group" aria-label="Carousel controls" hidden>
+        <button type="button" class="hero-control" data-slide-control="previous" aria-label="Previous slide"><span data-icon="left"></span></button>
+        <button type="button" class="hero-dot" data-slide-index="0" aria-label="Show home-style meals" aria-current="true"></button>
+        <button type="button" class="hero-dot" data-slide-index="1" aria-label="Show nutrition information"></button>
+        <button type="button" class="hero-dot" data-slide-index="2" aria-label="Show sharing packs"></button>
+        <button type="button" class="hero-control" data-slide-control="next" aria-label="Next slide"><span data-icon="right"></span></button>
+        <button type="button" class="hero-control hero-toggle" data-slide-control="toggle" aria-label="Pause slideshow"><span data-icon="pause"></span></button>
+      </div>
+      <span class="sr-only" id="highlight-status" role="status"></span>
     </section>
 
     <div class="order-layout" id="menu">

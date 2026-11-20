@@ -15,10 +15,73 @@ const symbols = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   close: '<path d="m6 6 12 12M6 18 18 6"/>',
   check: '<path d="m5 12 5 5L20 7"/>',
+  left: '<path d="m14 6-6 6 6 6"/>',
+  right: '<path d="m10 6 6 6-6 6"/>',
+  pause: '<path d="M9 5v14m6-14v14"/>',
+  play: '<path d="m8 5 12 7-12 7Z"/>',
 };
 const icon = name => `<svg class="icon" aria-hidden="true" viewBox="0 0 24 24">${symbols[name]}</svg>`;
 document.querySelectorAll('[data-icon]').forEach(element => { element.innerHTML = icon(element.dataset.icon); });
 const byId = id => document.getElementById(id);
+
+function startHighlights() {
+  const carousel = byId('highlights');
+  const slides = [...carousel.querySelectorAll('.hero-slide')];
+  const dots = [...carousel.querySelectorAll('.hero-dot')];
+  const controls = carousel.querySelector('.hero-controls');
+  const toggle = controls.querySelector('[data-slide-control="toggle"]');
+  let index = 0;
+  let playing = true;
+  let timer;
+
+  function schedule() {
+    clearTimeout(timer);
+    if (!playing || document.hidden) return;
+    timer = setTimeout(() => {
+      // Keep the current slide visible while a customer is using its link.
+      if (!slides[index].contains(document.activeElement) && !document.querySelector('dialog[open]')) {
+        showSlide(index + 1);
+      }
+      schedule();
+    }, 6000);
+  }
+  function setPlaying(value) {
+    playing = value;
+    toggle.setAttribute('aria-label', playing ? 'Pause slideshow' : 'Play slideshow');
+    toggle.innerHTML = icon(playing ? 'pause' : 'play');
+    schedule();
+  }
+  function showSlide(next, announce = false) {
+    index = (next + slides.length) % slides.length;
+    slides.forEach((slide, position) => {
+      const current = position === index;
+      slide.classList.toggle('current', current);
+      slide.inert = !current;
+      if (current) slide.removeAttribute('aria-hidden');
+      else slide.setAttribute('aria-hidden', 'true');
+      dots[position].setAttribute('aria-current', String(current));
+    });
+    if (announce) {
+      byId('highlight-status').textContent = dots[index].getAttribute('aria-label').replace('Show ', '') + `, slide ${index + 1} of ${slides.length}`;
+    }
+  }
+  controls.addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    const action = button.dataset.slideControl;
+    if (action === 'toggle') {
+      setPlaying(!playing);
+      return;
+    }
+    const next = action === 'previous' ? index - 1 : action === 'next' ? index + 1 : Number(button.dataset.slideIndex);
+    showSlide(next, true);
+    schedule();
+  });
+  document.addEventListener('visibilitychange', schedule);
+  controls.hidden = false;
+  schedule();
+}
+
 const clean = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[character]);
@@ -486,6 +549,7 @@ byId('delivery-date').addEventListener('change', event => {
   state.category = 'All dishes';
   void loadMenu();
 });
+startHighlights();
 void loadMenu({ first: true });
 setInterval(() => {
   const today = localTime().date;
