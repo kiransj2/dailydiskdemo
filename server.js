@@ -1,12 +1,14 @@
 import { createServer } from 'node:http';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bulkPacks, dayOffset, dishes, localTime, locations, mealNames, menuKey, quote, resolveMenus, sharingPackSavings, sharingPackUnitPrice } from './public/model.js';
 
 const publicRoot = fileURLToPath(new URL('./public', import.meta.url)).replace(/\/$/, '');
-const dataRoot = resolve(process.env.DAILYDISH_DATA_DIR || '.data');
+const onVercel = process.env.VERCEL === '1';
+const dataRoot = resolve(process.env.DAILYDISH_DATA_DIR || (onVercel ? resolve(tmpdir(), 'dailydish') : '.data'));
 const dataFile = resolve(dataRoot, 'store.json');
 const adminKey = process.env.DAILYDISH_ADMIN_KEY;
 const passwordHash = value => createHash('sha256').update(value).digest();
@@ -16,6 +18,9 @@ const adminCookieName = 'dailydish_kitchen';
 const adminSessionSeconds = 8 * 60 * 60;
 const adminPage = resolve(publicRoot, 'admin.html');
 const adminScript = resolve(publicRoot, 'admin.js');
+const adminPageView = new URL('./views/admin.html', import.meta.url);
+// Bundle the browser script as a file. Its import resolves at the public URL.
+const adminScriptView = new URL('./views/admin.js.txt', import.meta.url);
 const adminLoginView = new URL('./views/admin-login.html', import.meta.url);
 const state = await readFile(dataFile, 'utf8').then(JSON.parse).catch(error => {
   if (error.code !== 'ENOENT') throw error;
@@ -76,7 +81,7 @@ function adminSession(request) {
   return null;
 }
 function adminCookie(request, token, seconds) {
-  const secure = request.socket.encrypted || process.env.DAILYDISH_SECURE_COOKIES === '1';
+  const secure = request.socket.encrypted || onVercel || process.env.DAILYDISH_SECURE_COOKIES === '1';
   return `${adminCookieName}=${token}; Max-Age=${seconds}; Path=/; HttpOnly; SameSite=Strict${secure ? '; Secure' : ''}`;
 }
 function redirect(response, location, cookie) {
@@ -237,7 +242,10 @@ const server = createServer(async (request, response) => {
       if (file === adminPage) return await showAdminLogin(request, response, url.searchParams.get('login') === 'invalid');
       return send(response, 401, { error: 'Sign in to Kitchen admin first.' });
     }
-    const contents = await readFile(file);
+    const contents = file === adminPage ? await readFile(adminPageView)
+      : file === adminScript ? await readFile(adminScriptView)
+      : path === '/' ? await readFile(new URL('./public/index.html', import.meta.url))
+      : await readFile(file);
     response.writeHead(200, {
       'Content-Type': mime[extname(file)],
       'X-Content-Type-Options': 'nosniff',
