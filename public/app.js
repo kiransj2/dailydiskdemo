@@ -1,4 +1,4 @@
-import { bulkPacks, dayOffset, dishes, extraOptions, localTime, locations, mainOptions, mealNames, money, quote, resolveLine, sharingPackPrice, sideOptions, timeLabel } from './model.js';
+import { bulkPacks, dayOffset, dishes, extraOptions, localTime, locations, mainOptions, mealNames, money, preorderPrice, quote, resolveLine, sharingPackPrice, sideOptions, timeLabel } from './model.js';
 
 const symbols = {
   dish: '<path d="M3 17h18M5 17a7 7 0 0 1 14 0M12 8V6M9 4c-1-1 1-2 0-3M15 4c-1-1 1-2 0-3M5 20h14"/>',
@@ -220,7 +220,7 @@ function card(entry, menu) {
   const label = menu.phase === 'closed' ? 'Closed' : soldOut ? 'Sold out' : isCombo ? 'Customize' : 'Add';
   const price = entry.price;
   const discount = menu.phase === 'preorder' ? menu.discount : 0;
-  const displayed = Math.round(price * (100 - discount)) / 100;
+  const displayed = preorderPrice(price, discount);
   const badge = item.badge || (item.veg ? 'VEGETARIAN' : '');
   const nutrition = isCombo ? nutrient('28+', '5+') : nutrient(item.protein, item.fiber);
   const packs = entry.bulk && bulkPacks[id];
@@ -242,6 +242,10 @@ function card(entry, menu) {
     </div>
   </article>`;
 }
+function orderItemName(item) {
+  if (!item.packSize) return item.name;
+  return `${item.packSize.replace(/ kg$/, ' KG')} ${item.name}`;
+}
 function cartMarkup() {
   const list = lines();
   const menu = active();
@@ -255,7 +259,9 @@ function cartMarkup() {
   const lineMarkup = list.map((line, index) => {
     let item;
     try { if (menu) item = resolveLine(line, menu); } catch {}
-    return `<div class="cart-line"><div><strong>${item?.name || dishes[line.id]?.name || 'Menu item'}</strong><p>${item ? clean(item.description) : 'Currently unavailable'}</p>${item ? `<p>${nutrientText(item.protein == null ? null : item.protein * line.qty, 'protein', item.proteinPartial)} · ${nutrientText(item.fiber == null ? null : item.fiber * line.qty, 'fiber', item.fiberPartial)}</p>` : ''}</div><div><strong>${item ? money(item.price * line.qty) : ''}</strong><div class="quantity"><button type="button" data-action="minus" data-value="${index}" aria-label="Remove one ${item?.name || 'item'}">−</button><span>${line.qty}</span><button type="button" data-action="plus" data-value="${index}" aria-label="Add one ${item?.name || 'item'}">+</button></div></div></div>`;
+    const name = clean(item ? orderItemName(item) : dishes[line.id]?.name || 'Menu item');
+    const description = item ? item.description : 'Currently unavailable';
+    return `<div class="cart-line"><div><strong>${name}</strong>${description ? `<p>${clean(description)}</p>` : ''}${item ? `<p>${nutrientText(item.protein == null ? null : item.protein * line.qty, 'protein', item.proteinPartial)} · ${nutrientText(item.fiber == null ? null : item.fiber * line.qty, 'fiber', item.fiberPartial)}</p>` : ''}</div><div><strong>${item ? money(item.price * line.qty) : ''}</strong><div class="quantity"><button type="button" data-action="minus" data-value="${index}" aria-label="Remove one ${name}">−</button><span>${line.qty}</span><button type="button" data-action="plus" data-value="${index}" aria-label="Add one ${name}">+</button></div></div></div>`;
   }).join('');
   return head + `<div class="cart-lines">${lineMarkup}</div>` + (bill ? `
     <p class="cart-footnote">Cart nutrition</p>${nutrient(bill.protein, bill.fiber, bill)}
@@ -388,7 +394,7 @@ function customize(id) {
     form.querySelector('button[type=submit]').disabled = !chosen.main || !chosen.side;
     if (!chosen.main || !chosen.side) { byId('combo-summary').textContent = 'This combo is sold out.'; return; }
     const item = resolveLine(chosen, menu);
-    const price = Math.round(item.price * (100 - (menu.phase === 'preorder' ? menu.discount : 0))) / 100;
+    const price = preorderPrice(item.price, menu.phase === 'preorder' ? menu.discount : 0);
     byId('combo-summary').innerHTML = `${nutrient(item.protein, item.fiber, item)}<strong>${money(price)}</strong>`;
   };
   summary();
@@ -460,7 +466,10 @@ function checkout() {
   if (pendingRequest?.fingerprint !== fingerprint) pendingRequest = { fingerprint, id: globalThis.crypto.randomUUID() };
   showModal('checkout', 'Review your order', `<div class="dialog-body">
     <p><strong>${mealNames[meal]} · ${dateName(date)}</strong><br>${state.site.name} · ${clean(state.detail)}<br>Arrives ${timeLabel(menu.arrivalStart)} – ${timeLabel(menu.arrivalEnd)} IST</p>
-    ${bill.items.map(item => `<div class="cart-line"><div><strong>${item.qty} × ${item.name}</strong><p>${clean(item.description)}</p></div><strong>${money(item.price * item.qty)}</strong></div>`).join('')}
+    ${bill.items.map(item => {
+      const quantity = !item.packSize || item.qty > 1 ? `${item.qty} × ` : '';
+      return `<div class="cart-line"><div><strong>${quantity}${clean(orderItemName(item))}</strong>${item.description ? `<p>${clean(item.description)}</p>` : ''}</div><strong>${money(item.price * item.qty)}</strong></div>`;
+    }).join('')}
     <p class="cart-footnote">Cart nutrition</p>${nutrient(bill.protein, bill.fiber, bill)}
     ${bill.missed ? `<div class="cart-promo">${icon('clock')} You could have saved ${money(bill.missed)} by ordering before ${timeLabel(menu.cutoff)}</div>` : ''}
     <div class="details"><div><span>Item total</span><strong>${money(bill.subtotal)}</strong></div>

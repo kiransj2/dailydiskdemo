@@ -70,8 +70,9 @@ The later pricing clarification identifies 15% as the planned early-bird discoun
 
 - Staff select which dishes offer sharing packs and enter the price per 500 g. Calculate the price by multiplying that amount by the number of 500 g increments. Customers use minus and plus buttons to choose from 500 g through 5 kg.
 - Sharing packs are available only before the selected meal’s preorder cutoff. Show **“Sharing packs”** and the available sizes on each eligible dish, then show the deadline in the pack picker. After the cutoff, show **“Preorders closed”** on the dish’s sharing pack row.
+- A sharing pack must cost less per 100 g than the same dish’s single portion at its preorder price. Explain the savings in the homepage banner. Show the selected pack’s total price in the picker.
 - A dish may still be available in regular portions during the late-order window if those portions are on the menu and in stock.
-- Show the pack size, quantity, price, and available pack-level nutrition in the cart. Flag bulk items if the cutoff passes before the order is placed. Confirm whether bulk packs qualify for the early-bird discount.
+- Put the pack size in the item name in both cart and checkout, such as **“1.5 KG Chicken Dum Biryani.”** Show the pack count when customers order more than one. Show the price and available pack-level nutrition in the cart. Flag bulk items if the cutoff passes before the order is placed. Confirm whether bulk packs qualify for the early-bird discount.
 
 ## Live-site observations
 

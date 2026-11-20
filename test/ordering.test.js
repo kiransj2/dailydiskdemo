@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { bulkPacks, defaultMenu, menuKey, quote, resolveMenus } from '../public/model.js';
+import { bulkPacks, defaultMenu, menuKey, quote, resolveMenus, sharingPackSavings } from '../public/model.js';
 
 const blank = { menus: {}, schedules: {}, stock: {} };
 const date = '2026-11-20';
@@ -48,7 +48,7 @@ test('sharing packs scale the 500 g price and only allow advance orders', () => 
   const menu = defaultMenu(date, 'lunch', 'east');
   const entry = menu.entries.find(entry => entry.id === 'biryani');
   const db = { ...blank, menus: { [key]: menu } };
-  assert.equal(quote([pack], lunch('09:00', db)).subtotal, 458);
+  assert.equal(quote([pack], lunch('09:00', db)).subtotal, 360);
   entry.packs = { '500': 225, '1000': 449, '5000': 1999 };
   const bill = quote([pack], lunch('09:00', db));
   assert.equal(bill.subtotal, 450);
@@ -63,4 +63,12 @@ test('sharing packs scale the 500 g price and only allow advance orders', () => 
   assert.throws(() => quote([{ ...pack, pack: '5500' }], lunch('09:00', db)), /unavailable/);
   assert.throws(() => quote([{ ...pack, pack: '750' }], lunch('09:00', db)), /unavailable/);
   assert.throws(() => quote([pack], lunch('10:00', db)), /Sharing pack preorders/);
+});
+
+test('sharing pack savings use the same dish’s discounted preorder price per 100 g', () => {
+  const entry = defaultMenu(date, 'lunch', 'east').entries.find(item => item.id === 'biryani');
+  assert.equal(sharingPackSavings(entry, 10), 4.28);
+  assert.equal(sharingPackSavings(entry, 15), 2.04);
+  assert.equal(sharingPackSavings({ ...entry, packPrice: 210 }, 10), 0);
+  assert.equal(sharingPackSavings({ ...entry, price: 160, packPrice: 180 }, 10), 0);
 });

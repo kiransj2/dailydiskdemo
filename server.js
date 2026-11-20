@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { bulkPacks, dayOffset, dishes, localTime, locations, mealNames, menuKey, quote, resolveMenus, sharingPackUnitPrice } from './public/model.js';
+import { bulkPacks, dayOffset, dishes, localTime, locations, mealNames, menuKey, quote, resolveMenus, sharingPackSavings, sharingPackUnitPrice } from './public/model.js';
 
 const publicRoot = fileURLToPath(new URL('./public', import.meta.url)).replace(/\/$/, '');
 const dataRoot = resolve(process.env.DAILYDISH_DATA_DIR || '.data');
@@ -137,6 +137,9 @@ function cleanMenu(input) {
     if (!bulk) return { id, price, stock, bulk };
     const packPrice = sharingPackUnitPrice(entry);
     if (!Number.isInteger(packPrice) || packPrice < 1 || packPrice > 100000) throw bad('Check the sharing pack price per 500 g.');
+    if (!sharingPackSavings({ id, price, packPrice }, schedule.discount)) {
+      throw bad(`Lower the sharing pack price for ${dishes[id].name}. It needs to cost less per 100 g than an early-bird portion.`);
+    }
     return { id, price, stock, bulk, packPrice };
   });
   return { ...schedule, entries };

@@ -8,9 +8,9 @@ export const locations = [
 export const dishes = {
   thali: { name: 'Homestyle Chicken Thali', category: 'Combos', desc: 'Comforting chicken curry with a main and a side of your choice.', price: 169, stock: 8, badge: 'BUILD YOUR MEAL' },
   harvest: { name: 'Chana Harvest Bowl', category: 'Bowls', desc: 'Spiced chickpeas, roasted vegetables and brown rice with a squeeze of lime.', price: 139, protein: 18, fiber: 11, portion: '360 g', stock: 7, veg: true },
-  biryani: { name: 'Chicken Dum Biryani', category: 'Bowls', desc: 'Slow-cooked basmati and spiced chicken, served with cooling raita.', price: 179, protein: 29, fiber: 4, portion: '400 g', stock: 5 },
+  biryani: { name: 'Chicken Dum Biryani', category: 'Bowls', desc: 'Slow-cooked basmati and spiced chicken, served with cooling raita.', price: 179, protein: 29, fiber: 4, portion: '400 g', grams: 400, stock: 5 },
   paneer: { name: 'Paneer Masala', category: 'Sides', desc: 'Soft paneer in a slow-cooked tomato and onion gravy.', price: 129, protein: 16, fiber: 4, portion: '250 g', stock: 6, veg: true },
-  kebab: { name: 'Chicken Seekh Kebab', category: 'Sides', desc: 'Chargrilled chicken skewers with mint chutney and onions.', price: 149, protein: 24, fiber: 2, portion: '180 g', stock: 5 },
+  kebab: { name: 'Chicken Seekh Kebab', category: 'Sides', desc: 'Chargrilled chicken skewers with mint chutney and onions.', price: 149, protein: 24, fiber: 2, portion: '180 g', grams: 180, stock: 5 },
   dal: { name: 'Tadka Dal', category: 'Sides', desc: 'Yellow lentils with a fragrant cumin and chilli tempering.', price: 89, protein: 12, fiber: 8, portion: '250 g', stock: 9, veg: true },
 };
 
@@ -43,12 +43,18 @@ export const bulkPacks = {
   biryani: sharingPacks(36, 5),
   kebab: sharingPacks(65, 5),
 };
-const defaultSharingPackPrices = { biryani: 229, kebab: 369 };
+const defaultSharingPackPrices = { biryani: 180, kebab: 330 };
 export function sharingPackUnitPrice(entry) {
   return entry.packPrice ?? entry.packs?.['500'] ?? defaultSharingPackPrices[entry.id];
 }
 export function sharingPackPrice(entry, pack) {
   return sharingPackUnitPrice(entry) * (Number(pack.id) / 500);
+}
+export function sharingPackSavings(entry, discount) {
+  const portionPaise = Math.round(preorderPrice(entry.price, discount) * 100);
+  const portionPer100g = portionPaise * 100 / dishes[entry.id].grams;
+  const packPer100g = sharingPackUnitPrice(entry) * 100 / 5;
+  return Math.max(0, Math.round(portionPer100g - packPer100g)) / 100;
 }
 
 export const mealNames = { lunch: 'Lunch', dinner: 'Dinner' };
@@ -106,6 +112,7 @@ export const money = value => new Intl.NumberFormat('en-IN', {
   style: 'currency', currency: 'INR', maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
 }).format(value);
 const round = value => Math.round(value * 100) / 100;
+export const preorderPrice = (price, discount) => round(price - round(price * discount / 100));
 function sumNutrients(items) {
   const values = {};
   for (const key of ['protein', 'fiber']) {
@@ -123,7 +130,7 @@ export function resolveLine(line, menu) {
   if (line.kind === 'bulk') {
     const pack = entry.bulk && bulkPacks[line.id]?.find(option => option.id === line.pack);
     if (!pack) throw new Error('This sharing pack is unavailable.');
-    return { ...pack, price: sharingPackPrice(entry, pack), name: dish.name, description: pack.name + ' sharing pack', stockKeys: [], qty: line.qty };
+    return { ...pack, price: sharingPackPrice(entry, pack), name: dish.name, packSize: pack.name, stockKeys: [], qty: line.qty };
   }
   if (line.kind !== (line.id === 'thali' ? 'combo' : 'standard')) throw new Error('Choose a valid item option.');
   if (line.kind === 'combo') {
