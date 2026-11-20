@@ -12,4 +12,6 @@ For development, run `npm run dev`. Node restarts the server when the server or 
 
 The demo includes sample delivery sites, menu items, nutrition, and prices. Checkout persists demo orders locally and uses no payment or OTP services. Bulk packs use regular pricing. The included meal fees and tax are illustrative. Replace this sample data and connect the appropriate services before taking real orders.
 
-The server stores published menus and demo orders in `.data/store.json`. Set `DAILYDISH_ADMIN_KEY` to require an admin key for publishing or `DAILYDISH_DATA_DIR` to use another data directory.
+Kitchen admin accepts any nonempty password in demo mode. Set `DAILYDISH_ADMIN_KEY` in the server environment before starting a shared or public instance to require that password. Admin sessions expire after eight hours or when the server restarts. Set `DAILYDISH_SECURE_COOKIES=1` when serving the app behind HTTPS.
+
+The server stores published menus and demo orders in `.data/store.json`. Set `DAILYDISH_DATA_DIR` to use another data directory.

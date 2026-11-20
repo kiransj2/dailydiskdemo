@@ -22,6 +22,7 @@ Show the applicable preorder deadlines near the menu entry point once the custom
 
 ## Daily menus and ordering hours
 
+- Kitchen admin requires sign-in before staff can see its editor or publish a menu. Demo sign-in accepts any nonempty password when no admin password is configured.
 - Staff must be able to publish a different lunch and dinner menu each day. Configure menus by serving hub, delivery date, and meal. Reuse catalog entries for dish details, portion sizes, and nutrition.
 - Ordering hours are configurable. Maintain separate preorder cutoffs and late-order closing times for each meal. Support different schedules by hub and weekday, including separate Saturday and Sunday hours. A date override for holidays or one-off closures is a proposed addition.
 - The times below are the examples discussed. Customer-facing times and checkout enforcement must use the effective schedule for the selected hub, date, and meal in IST.

@@ -7,6 +7,9 @@ const status = document.getElementById('admin-status');
 const submit = form.querySelector('[type="submit"]');
 const today = localTime().date;
 let version = 0;
+window.addEventListener('pageshow', event => {
+  if (event.persisted) window.location.reload();
+});
 fields.date.min = today;
 fields.date.max = dayOffset(today, 30);
 fields.date.value = today;
@@ -76,7 +79,7 @@ form.addEventListener('submit', async event => {
       packPrice: fields['pack-' + id]?.valueAsNumber,
     }));
     const { message } = await request('/api/admin/menu', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': fields.key.value },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         site: fields.site.value, date: fields.date.value, meal: fields.meal.value,
         cutoff: fields.cutoff.value, close: fields.close.value, discount: fields.discount.valueAsNumber,

@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bulkPacks, dayOffset, dishes, localTime, locations, mealNames, menuKey, quote, resolveMenus, sharingPackUnitPrice } from './public/model.js';
@@ -9,6 +9,14 @@ const publicRoot = fileURLToPath(new URL('./public', import.meta.url)).replace(/
 const dataRoot = resolve(process.env.DAILYDISH_DATA_DIR || '.data');
 const dataFile = resolve(dataRoot, 'store.json');
 const adminKey = process.env.DAILYDISH_ADMIN_KEY;
+const passwordHash = value => createHash('sha256').update(value).digest();
+const adminPasswordHash = adminKey ? passwordHash(adminKey) : null;
+const adminSessions = new Map();
+const adminCookieName = 'dailydish_kitchen';
+const adminSessionSeconds = 8 * 60 * 60;
+const adminPage = resolve(publicRoot, 'admin.html');
+const adminScript = resolve(publicRoot, 'admin.js');
+const adminLoginView = new URL('./views/admin-login.html', import.meta.url);
 const state = await readFile(dataFile, 'utf8').then(JSON.parse).catch(error => {
   if (error.code !== 'ENOENT') throw error;
   return { menus: {}, schedules: {}, stock: {}, orders: {} };
@@ -42,16 +50,50 @@ const send = (response, code, body) => {
   response.end(JSON.stringify(body));
 };
 const bad = message => Object.assign(new Error(message), { status: 400 });
-async function bodyOf(request) {
+async function readBody(request, limit) {
   let body = '';
   for await (const chunk of request) {
     body += chunk;
-    if (body.length > 50000) throw bad('Request is too large.');
+    if (body.length > limit) throw bad('Request is too large.');
   }
+  return body;
+}
+async function bodyOf(request) {
+  const body = await readBody(request, 50000);
   let value;
   try { value = JSON.parse(body); } catch { throw bad('Send valid JSON.'); }
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw bad('Send a JSON object.');
   return value;
+}
+function adminSession(request) {
+  const prefix = adminCookieName + '=';
+  const cookie = request.headers.cookie?.split(';').map(part => part.trim()).find(part => part.startsWith(prefix));
+  const token = cookie?.slice(prefix.length);
+  if (!token) return null;
+  if (adminSessions.get(token) > Date.now()) return token;
+  adminSessions.delete(token);
+  return null;
+}
+function adminCookie(request, token, seconds) {
+  const secure = request.socket.encrypted || process.env.DAILYDISH_SECURE_COOKIES === '1';
+  return `${adminCookieName}=${token}; Max-Age=${seconds}; Path=/; HttpOnly; SameSite=Strict${secure ? '; Secure' : ''}`;
+}
+function redirect(response, location, cookie) {
+  response.writeHead(303, {
+    Location: location,
+    'Cache-Control': 'no-store',
+    ...(cookie ? { 'Set-Cookie': cookie } : {}),
+  });
+  response.end();
+}
+async function showAdminLogin(request, response, invalid) {
+  const template = await readFile(adminLoginView, 'utf8');
+  const message = adminPasswordHash ? 'Incorrect password. Try again.' : 'Enter a password to continue.';
+  const content = template
+    .replace('<!-- demo hint -->', adminPasswordHash ? '' : '<p class="cart-footnote">Demo mode. Enter any password to continue.</p>')
+    .replace('<!-- login message -->', invalid ? `<p class="form-error" role="alert">${message}</p>` : '');
+  response.writeHead(200, { 'Content-Type': mime['.html'], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+  response.end(request.method === 'HEAD' ? undefined : content);
 }
 function deliveryDate(date, today) {
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date) || date < today || date > dayOffset(today, 30) || !Number.isFinite(Date.parse(date + 'T12:00:00Z')) || dayOffset(date, 0) !== date) {
@@ -104,6 +146,25 @@ const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     const method = request.method;
     const path = url.pathname;
+    if (method === 'POST' && path === '/api/admin/login') {
+      const form = new URLSearchParams(await readBody(request, 4096));
+      const password = form.get('password') || '';
+      if (!password || (adminPasswordHash && !timingSafeEqual(passwordHash(password), adminPasswordHash))) {
+        return redirect(response, '/admin.html?login=invalid');
+      }
+      const now = Date.now();
+      for (const [token, expires] of adminSessions) {
+        if (expires <= now) adminSessions.delete(token);
+      }
+      adminSessions.delete(adminSession(request));
+      const token = randomUUID();
+      adminSessions.set(token, now + adminSessionSeconds * 1000);
+      return redirect(response, '/admin.html', adminCookie(request, token, adminSessionSeconds));
+    }
+    if (method === 'POST' && path === '/api/admin/logout') {
+      adminSessions.delete(adminSession(request));
+      return redirect(response, '/admin.html', adminCookie(request, '', 0));
+    }
     if (method === 'GET' && path === '/api/menu') {
       const today = localTime().date;
       const site = url.searchParams.has('site') ? getSite(url.searchParams.get('site')) : locations[0];
@@ -144,8 +205,8 @@ const server = createServer(async (request, response) => {
       return send(response, 201, result);
     }
     if (method === 'POST' && path === '/api/admin/menu') {
-      if (adminKey && request.headers['x-admin-key'] !== adminKey) {
-        return send(response, 401, { error: 'Enter the admin key to save changes.' });
+      if (!adminSession(request)) {
+        return send(response, 401, { error: 'Reload Kitchen admin and sign in to publish menus.' });
       }
       const input = await bodyOf(request);
       const site = getSite(input.site);
@@ -167,8 +228,17 @@ const server = createServer(async (request, response) => {
     if (method !== 'GET' && method !== 'HEAD') return send(response, 405, { error: 'Method unavailable.' });
     const file = resolve(publicRoot, path === '/' ? 'index.html' : '.' + decodeURIComponent(path));
     if (!file.startsWith(publicRoot + sep) || !mime[extname(file)]) return send(response, 404, { error: 'Page not found.' });
+    const adminResource = file === adminPage || file === adminScript;
+    if (adminResource && !adminSession(request)) {
+      if (file === adminPage) return await showAdminLogin(request, response, url.searchParams.get('login') === 'invalid');
+      return send(response, 401, { error: 'Sign in to Kitchen admin first.' });
+    }
     const contents = await readFile(file);
-    response.writeHead(200, { 'Content-Type': mime[extname(file)], 'X-Content-Type-Options': 'nosniff' });
+    response.writeHead(200, {
+      'Content-Type': mime[extname(file)],
+      'X-Content-Type-Options': 'nosniff',
+      ...(adminResource ? { 'Cache-Control': 'no-store' } : {}),
+    });
     response.end(method === 'HEAD' ? undefined : contents);
   } catch (error) {
     const status = error.status || (error.code === 'ENOENT' ? 404 : request.url.startsWith('/api/order') && !error.code ? 400 : 500);

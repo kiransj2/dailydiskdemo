@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in to Kitchen admin — DailyDish</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap top-inner">
+      <a href="/" class="brand">DailyDish<span class="brand-dot">.</span></a>
+      <a href="/" class="outline">Back to the menu</a>
+    </div>
+  </header>
+  <main class="wrap admin-page admin-login">
+    <h1>Kitchen admin</h1>
+    <form class="cart-panel" action="/api/admin/login" method="post">
+      <label class="field">Admin password<input type="password" name="password" autocomplete="current-password" required></label>
+      <!-- demo hint -->
+      <!-- login message -->
+      <button type="submit" class="primary full">Sign in</button>
+    </form>
+  </main>
+</body>
+</html>

@@ -8,7 +8,13 @@
   <script src="/admin.js" type="module"></script>
 </head>
 <body>
-  <header class="topbar"><div class="wrap top-inner"><a href="/" class="brand">DailyDish<span class="brand-dot">.</span></a><a href="/" class="outline">Back to the menu</a></div></header>
+  <header class="topbar">
+    <div class="wrap top-inner">
+      <a href="/" class="brand">DailyDish<span class="brand-dot">.</span></a>
+      <a href="/" class="outline">Back to the menu</a>
+      <form class="admin-logout" action="/api/admin/logout" method="post"><button type="submit" class="outline">Sign out</button></form>
+    </div>
+  </header>
   <main class="wrap admin-page">
     <h1>Kitchen admin</h1>
     <p>Set the published menu, prices, discounts, and ordering hours for each serving hub.</p>
@@ -18,7 +24,6 @@
         <label class="field">Serving hub<select name="site"></select></label>
         <label class="field">Delivery date<input type="date" name="date" required></label>
         <label class="field">Meal<select name="meal"><option value="lunch">Lunch</option><option value="dinner">Dinner</option></select></label>
-        <label class="field">Admin key, if configured<input type="password" name="key" autocomplete="current-password"></label>
       </div>
       <h2>Ordering hours and pricing</h2>
       <div class="admin-grid">
