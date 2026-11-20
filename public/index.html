@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f8f7f1">
+  <meta name="description" content="Home-style meals cooked in batches. Preorder DailyDish lunch and dinner for delivery to your community.">
+  <title>DailyDish — A little more like home</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,650;9..144,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <a class="skip" href="#menu">Skip to the menu</a>
+  <header class="topbar">
+    <div class="wrap top-inner">
+      <a class="brand" href="/" aria-label="DailyDish home"><span class="brand-icon" data-icon="dish"></span><span>DailyDish<span class="brand-dot">.</span></span></a>
+      <button class="location-button" type="button" data-action="location">
+        <span class="location-icon" data-icon="pin"></span>
+        <span><small>Delivering to</small><strong id="site-label">Choose location</strong></span>
+        <span class="chevron" data-icon="down"></span>
+      </button>
+      <nav aria-label="Main navigation">
+        <a href="#menu" class="menu-link">Menu</a>
+        <button class="text-button how-link" type="button" data-action="how">How it works</button>
+        <button class="header-cart" type="button" data-action="cart" aria-label="Open cart"><span data-icon="bag"></span><span class="header-cart-label">Cart</span><span id="cart-count">0</span></button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero" aria-labelledby="hero-heading">
+      <div class="hero-copy">
+        <p class="hero-note"><span data-icon="sprout"></span> HOME-STYLE, EVERY DAY</p>
+        <h1 id="hero-heading">Good food.<br>Made for every day.</h1>
+        <p class="hero-desc">Your preorders help us shop smart and cook in one batch. That means balanced meals at everyday prices.</p>
+        <button type="button" class="hero-link" data-action="how">How preordering works <span data-icon="arrow"></span></button>
+      </div>
+      <img src="/images/hero.webp" alt="Golden rice, fresh herbs, rotis, and dal on a rustic table" width="1120" height="747" fetchpriority="high">
+    </section>
+
+    <div class="order-layout" id="menu">
+      <section aria-labelledby="menu-heading" class="menu-column">
+        <div class="menu-heading">
+          <div><h2 id="menu-heading">Today’s menu</h2><p id="menu-caption">Choose a meal to see what’s cooking.</p></div>
+          <label class="date-control"><span data-icon="calendar"></span><span class="sr-only">Delivery date</span><select id="delivery-date"></select><span data-icon="down"></span></label>
+        </div>
+        <div class="meal-tabs" id="meal-tabs" role="group" aria-label="Meal"></div>
+        <div id="order-window" class="order-window" aria-live="polite"></div>
+        <div class="categories" id="categories" aria-label="Menu categories"></div>
+        <div class="cards" id="cards"><p>Loading the menu…</p></div>
+      </section>
+
+      <aside class="cart-column" id="cart" aria-label="Your cart">
+        <div class="cart-panel" id="cart-panel"></div>
+        <div class="cart-info"><span data-icon="leaf"></span><div><strong>Cooked in small batches</strong><p>Preorders help us buy what we need and keep your meals affordable.</p></div></div>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="page-footer">
+    <div class="wrap footer-inner">
+      <a class="brand" href="/"><span class="brand-icon" data-icon="dish"></span><span>DailyDish<span class="brand-dot">.</span></span></a>
+      <button class="text-button" data-action="how" type="button">How preordering works</button>
+      <a href="/admin.html">Kitchen admin</a>
+    </div>
+  </footer>
+
+  <button class="mobile-cart primary" type="button" data-action="cart" id="mobile-cart" hidden></button>
+  <dialog id="modal" aria-labelledby="modal-title"></dialog>
+  <div id="notice" role="status" class="toast" hidden></div>
+</body>
+</html>

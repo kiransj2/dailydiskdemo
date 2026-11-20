@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kitchen admin — DailyDish</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/admin.js" type="module"></script>
+</head>
+<body>
+  <header class="topbar"><div class="wrap top-inner"><a href="/" class="brand">DailyDish<span class="brand-dot">.</span></a><a href="/" class="outline">Back to the menu</a></div></header>
+  <main class="wrap admin-page">
+    <h1>Kitchen admin</h1>
+    <p>Set the published menu, prices, discounts, and ordering hours for each serving hub.</p>
+    <form id="menu-form">
+      <h2>Meal to edit</h2>
+      <div class="admin-grid">
+        <label class="field">Serving hub<select name="site"></select></label>
+        <label class="field">Delivery date<input type="date" name="date" required></label>
+        <label class="field">Meal<select name="meal"><option value="lunch">Lunch</option><option value="dinner">Dinner</option></select></label>
+        <label class="field">Admin key, if configured<input type="password" name="key" autocomplete="current-password"></label>
+      </div>
+      <h2>Ordering hours and pricing</h2>
+      <div class="admin-grid">
+        <label class="field">Preorder cutoff, IST<input type="time" name="cutoff" required></label>
+        <label class="field">Late orders close, IST<input type="time" name="close" required></label>
+        <label class="field">Delivery starts, IST<input type="time" name="arrivalStart" required></label>
+        <label class="field">Delivery ends, IST<input type="time" name="arrivalEnd" required></label>
+        <label class="field">Early-bird discount (%)<input type="number" name="discount" min="0" max="100" step="0.1" required></label>
+        <label class="field"><span><input type="checkbox" name="repeat"> Also use these hours and discount on this weekday</span></label>
+      </div>
+      <h2>Dishes</h2>
+      <div class="admin-entry"><strong>Include dish</strong><strong>Price (₹)</strong><strong>Late stock</strong><strong>Sharing packs</strong></div>
+      <div id="admin-entries"></div>
+      <button type="submit" class="primary full">Publish menu</button>
+      <p id="admin-status" role="status" class="cart-footnote"></p>
+    </form>
+  </main>
+</body>
+</html>
