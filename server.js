@@ -235,7 +235,8 @@ const server = createServer(async (request, response) => {
     }
     if (path.startsWith('/api/')) return send(response, 404, { error: 'This action is unavailable.' });
     if (method !== 'GET' && method !== 'HEAD') return send(response, 405, { error: 'Method unavailable.' });
-    const file = resolve(publicRoot, path === '/' ? 'index.html' : '.' + decodeURIComponent(path));
+    const storefront = path === '/' || path === '/checkout';
+    const file = resolve(publicRoot, storefront ? 'index.html' : '.' + decodeURIComponent(path));
     if (!file.startsWith(publicRoot + sep) || !mime[extname(file)]) return send(response, 404, { error: 'Page not found.' });
     const adminResource = file === adminPage || file === adminScript;
     if (adminResource && !adminSession(request)) {
@@ -244,7 +245,7 @@ const server = createServer(async (request, response) => {
     }
     const contents = file === adminPage ? await readFile(adminPageView)
       : file === adminScript ? await readFile(adminScriptView)
-      : path === '/' ? await readFile(new URL('./public/index.html', import.meta.url))
+      : storefront ? await readFile(new URL('./public/index.html', import.meta.url))
       : await readFile(file);
     response.writeHead(200, {
       'Content-Type': mime[extname(file)],

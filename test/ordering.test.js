@@ -17,6 +17,10 @@ test('the configured cutoffs switch pricing and close ordering at the exact minu
   const early = quote([bowl(1)], lunch('09:59'));
   const late = quote([bowl(1)], lunch('10:00'));
   assert.equal(early.discount, 13.9);
+  assert.deepEqual(
+    { delivery: early.delivery, platform: early.platformFee, packing: early.packingFee, taxable: early.taxable, tax: early.tax, total: early.total },
+    { delivery: 9, platform: 0, packing: 0, taxable: 134.1, tax: 6.71, total: 140.81 },
+  );
   assert.equal(late.discount, 0);
   assert.equal(late.missed, 13.9);
   assert.throws(() => quote([bowl(1)], lunch('12:00')), /closed/);

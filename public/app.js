@@ -8,6 +8,8 @@ const symbols = {
   sprout: '<path d="M12 21v-9m0 3C12 9 9 6 4 6c0 6 3 9 8 9Zm0-3c0-6 3-9 8-9 0 6-3 9-8 9Z"/>',
   leaf: '<path d="M20 4C9 3 4 8 5 15c1 4 5 5 8 3 5-2 7-7 7-14ZM3 21l11-11"/>',
   arrow: '<path d="M4 12h15m-6-6 6 6-6 6"/>',
+  back: '<path d="M20 12H5m6 6-6-6 6-6"/>',
+  wallet: '<path d="M20 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M4 8h16a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-4a4 4 0 0 1 0-8h4"/><path d="M16 12h.01"/>',
   calendar: '<rect x="4" y="6" width="16" height="14" rx="2"/><path d="M8 3v5m8-5v5M4 10h16"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>',
   moon: '<path d="M20 15A8.2 8.2 0 0 1 9 4a8.3 8.3 0 1 0 11 11Z"/>',
@@ -39,7 +41,7 @@ function startHighlights() {
     if (!playing || document.hidden) return;
     timer = setTimeout(() => {
       // Keep the current slide visible while a customer is using its link.
-      if (!slides[index].contains(document.activeElement) && !document.querySelector('dialog[open]')) {
+      if (!onCheckout() && !slides[index].contains(document.activeElement) && !document.querySelector('dialog[open]')) {
         showSlide(index + 1);
       }
       schedule();
@@ -93,7 +95,9 @@ function store(key, value) {
 }
 const categories = ['All dishes', 'Combos', 'Bowls', 'Sides'];
 const dayFormatter = new Intl.DateTimeFormat('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+const billingAmount = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const savedSite = restore('daily-site', null);
+const onCheckout = () => window.location.pathname === '/checkout';
 const state = {
   site: locations.find(site => site.id === savedSite?.id),
   detail: savedSite?.detail || '',
@@ -102,6 +106,7 @@ const state = {
   meal: 'lunch',
   category: 'All dishes',
   menus: null,
+  menuError: '',
   carts: restore('daily-carts', {}),
   version: 0,
 };
@@ -109,10 +114,13 @@ const active = () => state.menus?.[state.meal];
 const scope = () => `${state.site?.hub || locations[0].hub}:${state.date}:${state.meal}`;
 const lines = () => state.carts[scope()] || [];
 const modal = byId('modal');
+const checkoutPage = byId('checkout-page');
+const storefront = document.querySelectorAll('[data-storefront]');
 let modalType = '';
 let toastTimer;
 let sendingOrder = false;
 let pendingRequest;
+let checkoutError = '';
 
 function alertUser(message) {
   const toast = byId('notice');
@@ -132,6 +140,7 @@ async function loadMenu({ first = false, silent = false } = {}) {
   const version = ++state.version;
   if (!silent) {
     state.menus = null;
+    state.menuError = '';
     render();
   }
   try {
@@ -140,6 +149,7 @@ async function loadMenu({ first = false, silent = false } = {}) {
     const data = await api('/api/menu?' + params);
     if (version !== state.version) return;
     state.menus = data.menus;
+    state.menuError = '';
     state.today = data.today;
     if (first && state.menus.lunch.phase === 'closed') state.meal = 'dinner';
     if (first && state.menus.lunch.phase === 'closed' && state.menus.dinner.phase === 'closed') {
@@ -150,7 +160,11 @@ async function loadMenu({ first = false, silent = false } = {}) {
     render();
   } catch (error) {
     if (version !== state.version) return;
-    if (!silent) byId('cards').innerHTML = `<div class="empty-state">${clean(error.message)} <button class="outline" data-action="reload">Try again</button></div>`;
+    if (!silent) {
+      state.menuError = error.message;
+      byId('cards').innerHTML = `<div class="empty-state">${clean(error.message)} <button class="outline" data-action="reload">Try again</button></div>`;
+      renderCheckout();
+    }
   }
 }
 
@@ -246,6 +260,17 @@ function orderItemName(item) {
   if (!item.packSize) return item.name;
   return `${item.packSize.replace(/ kg$/, ' KG')} ${item.name}`;
 }
+function cartItem(line, menu) {
+  if (!menu) return null;
+  try { return resolveLine(line, menu); } catch { return null; }
+}
+function quantityMarkup(index, name, qty, busy = false, canAdd = true) {
+  return `<div class="quantity">
+    <button type="button" data-action="minus" data-value="${index}" aria-label="Remove one ${name}" ${busy ? 'disabled' : ''}>−</button>
+    <span aria-label="Quantity ${qty}">${qty}</span>
+    <button type="button" data-action="plus" data-value="${index}" aria-label="Add one ${name}" ${busy || !canAdd ? 'disabled' : ''}>+</button>
+  </div>`;
+}
 function cartMarkup() {
   const list = lines();
   const menu = active();
@@ -257,11 +282,10 @@ function cartMarkup() {
     try { bill = quote(list, menu); } catch (error) { errorMessage = error.message; }
   }
   const lineMarkup = list.map((line, index) => {
-    let item;
-    try { if (menu) item = resolveLine(line, menu); } catch {}
+    const item = cartItem(line, menu);
     const name = clean(item ? orderItemName(item) : dishes[line.id]?.name || 'Menu item');
     const description = item ? item.description : 'Currently unavailable';
-    return `<div class="cart-line"><div><strong>${name}</strong>${description ? `<p>${clean(description)}</p>` : ''}${item ? `<p>${nutrientText(item.protein == null ? null : item.protein * line.qty, 'protein', item.proteinPartial)} · ${nutrientText(item.fiber == null ? null : item.fiber * line.qty, 'fiber', item.fiberPartial)}</p>` : ''}</div><div><strong>${item ? money(item.price * line.qty) : ''}</strong><div class="quantity"><button type="button" data-action="minus" data-value="${index}" aria-label="Remove one ${name}">−</button><span>${line.qty}</span><button type="button" data-action="plus" data-value="${index}" aria-label="Add one ${name}">+</button></div></div></div>`;
+    return `<div class="cart-line"><div><strong>${name}</strong>${description ? `<p>${clean(description)}</p>` : ''}${item ? `<p>${nutrientText(item.protein == null ? null : item.protein * line.qty, 'protein', item.proteinPartial)} · ${nutrientText(item.fiber == null ? null : item.fiber * line.qty, 'fiber', item.fiberPartial)}</p>` : ''}</div><div><strong>${item ? money(item.price * line.qty) : ''}</strong>${quantityMarkup(index, name, line.qty)}</div></div>`;
   }).join('');
   return head + `<div class="cart-lines">${lineMarkup}</div>` + (bill ? `
     <p class="cart-footnote">Cart nutrition</p>${nutrient(bill.protein, bill.fiber, bill)}
@@ -277,18 +301,21 @@ function renderCart() {
   byId('cart-count').textContent = count;
   byId('cart-panel').innerHTML = markup;
   const mobile = byId('mobile-cart');
-  mobile.hidden = !count;
+  mobile.hidden = !count || onCheckout();
   mobile.innerHTML = `<span>${icon('bag')} &nbsp; View cart</span><span>${count} ${count === 1 ? 'item' : 'items'}</span>`;
   if (modal.open && modalType === 'cart') {
     byId('modal-cart').innerHTML = markup;
   }
+  renderCheckout();
 }
-function replaceLines(next) {
-  state.carts[scope()] = next;
+function replaceLines(next, key = scope()) {
+  state.carts[key] = next;
+  checkoutError = '';
   store('daily-carts', state.carts);
   renderCart();
 }
 function put(line) {
+  if (sendingOrder) return;
   const menu = active();
   if (!menu) return;
   const next = structuredClone(lines());
@@ -306,6 +333,7 @@ function put(line) {
   return true;
 }
 function adjust(index, delta, button) {
+  if (sendingOrder) return;
   const next = structuredClone(lines());
   if (!next[index]) return;
   next[index].qty += delta;
@@ -313,9 +341,10 @@ function adjust(index, delta, button) {
   if (delta > 0) {
     try { quote(next, active()); } catch (error) { return alertUser(error.message); }
   }
-  const parent = button.closest('dialog') || byId('cart-panel');
+  const parent = button.closest('dialog, #checkout-page') || byId('cart-panel');
   replaceLines(next);
-  parent.querySelector(`[data-action="${delta > 0 ? 'plus' : 'minus'}"][data-value="${index}"]`)?.focus();
+  const updatedButton = parent.querySelector(`[data-action="${delta > 0 ? 'plus' : 'minus'}"][data-value="${index}"]:enabled`);
+  (updatedButton || parent.querySelector('.quantity button:enabled, [data-action="back-to-menu"]'))?.focus({ preventScroll: true });
 }
 function showModal(type, title, body) {
   modalType = type;
@@ -324,6 +353,7 @@ function showModal(type, title, body) {
   modal.scrollTop = 0;
 }
 function chooseSite(after) {
+  if (sendingOrder) return;
   showModal('location', 'Where should we deliver?', `<div class="dialog-body"><p>Choose a DailyDish apartment, school, or office.</p>
     <label class="field">Search delivery locations<input type="search" id="site-search" class="site-search" placeholder="Enter a site name or neighbourhood" autocomplete="off"></label>
     <div id="site-results" class="site-results"></div></div>`);
@@ -349,23 +379,38 @@ function siteDetails(site) {
     event.preventDefault();
     const detail = form.elements.detail.value.trim();
     if (!detail) return form.elements.detail.focus();
+    const previousKey = scope();
+    const previousCart = lines();
+    const changingCheckoutSite = onCheckout() && Boolean(state.site);
     if (!state.site) {
-      const previewKey = scope();
-      const preview = lines();
       state.site = site;
-      if (scope() !== previewKey && preview.length && !lines().length) {
-        state.carts[scope()] = preview;
-        delete state.carts[previewKey];
+      if (scope() !== previousKey && previousCart.length && !lines().length) {
+        state.carts[scope()] = previousCart;
+        delete state.carts[previousKey];
         store('daily-carts', state.carts);
       }
     }
     state.site = site;
     state.detail = detail;
+    checkoutError = '';
     store('daily-site', { id: site.id, detail });
     modal.close();
     await loadMenu();
-    if (after === 'checkout') checkout();
-    else alertUser(`Delivery location set to ${site.name}.`);
+    if (changingCheckoutSite && scope() !== previousKey && previousCart.length && !lines().length) {
+      try {
+        if (!active()) throw new Error('Menu unavailable');
+        quote(previousCart, active());
+        delete state.carts[previousKey];
+        replaceLines(previousCart);
+      } catch {
+        checkoutError = 'Your previous cart is saved at its delivery location. Browse the menu for this location to start a new cart.';
+      }
+    }
+    if (after === 'checkout') {
+      const returning = onCheckout();
+      checkout();
+      if (returning) checkoutPage.querySelector('[data-action="checkout-location"]')?.focus({ preventScroll: true });
+    } else alertUser(`Delivery location set to ${site.name}.`);
   });
 }
 function optionMarkup(options, group, type, entry) {
@@ -453,65 +498,213 @@ function bulkOrder(id) {
     }
   });
 }
+function readCheckoutContext() {
+  if (!onCheckout()) return;
+  const params = new URLSearchParams(window.location.search);
+  const date = params.get('date');
+  const meal = params.get('meal');
+  if (date && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(date + 'T12:00:00Z'))) state.date = date;
+  if (Object.hasOwn(mealNames, meal)) state.meal = meal;
+}
+function showRoute() {
+  const checkout = onCheckout();
+  storefront.forEach(element => { element.hidden = checkout; });
+  byId('checkout-top').hidden = !checkout;
+  checkoutPage.hidden = !checkout;
+  document.title = checkout ? 'Checkout — DailyDish' : 'DailyDish — A little more like home';
+}
 function checkout() {
-  const menu = active();
-  if (!menu) return;
-  let bill;
-  try { bill = quote(lines(), menu); } catch (error) { return alertUser(error.message); }
   if (!state.site) return chooseSite('checkout');
-  const meal = state.meal;
-  const date = state.date;
-  const expected = { site: state.site.id, detail: state.detail, date, meal, lines: lines(), expectedTotal: bill.total, expectedPhase: menu.phase };
+  if (onCheckout()) return renderCheckout();
+  if (!lines().length) return alertUser('Add a dish to your cart first.');
+  if (modal.open) modal.close();
+  const params = new URLSearchParams({ date: state.date, meal: state.meal });
+  history.pushState({ fromMenu: true }, '', '/checkout?' + params);
+  checkoutError = '';
+  clearTimeout(toastTimer);
+  byId('notice').hidden = true;
+  showRoute();
+  renderCart();
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  byId('checkout-title').focus({ preventScroll: true });
+}
+function backToMenu() {
+  if (sendingOrder) return;
+  if (history.state?.fromMenu) {
+    history.back();
+    return;
+  }
+  history.replaceState(null, '', '/#menu');
+  showRoute();
+  renderCart();
+  byId('menu').scrollIntoView();
+}
+function arrivalWindow(menu) {
+  const withMinutes = value => timeLabel(value).replace(/^(\d+) ([AP]M)$/, '$1:00 $2');
+  const start = withMinutes(menu.arrivalStart);
+  const end = withMinutes(menu.arrivalEnd);
+  return `${start.slice(-2) === end.slice(-2) ? start.slice(0, -3) : start}–${end}`;
+}
+function checkoutSides(menu) {
+  if (!menu || menu.phase === 'closed') return [];
+  return menu.entries.filter(entry => dishes[entry.id].category === 'Sides' && (menu.phase !== 'late' ||
+    entry.remaining > lines().filter(line => line.id === entry.id && line.kind === 'standard').reduce((sum, line) => sum + line.qty, 0)));
+}
+function checkoutItems(list, menu) {
+  return list.map((line, index) => {
+    const item = cartItem(line, menu);
+    const name = clean(item ? orderItemName(item) : dishes[line.id]?.name || 'Menu item');
+    const canAdd = Boolean(item && menu.phase !== 'closed' && line.qty < 20 && (line.kind !== 'bulk' || menu.phase === 'preorder'));
+    return `<li class="checkout-item">
+      <div class="checkout-item-info">
+        <strong>${name}</strong>
+        ${item?.description ? `<p>${clean(item.description)}</p>` : ''}
+        ${item ? nutrient(item.protein, item.fiber, item) : '<p>Currently unavailable</p>'}
+      </div>
+      ${quantityMarkup(index, name, line.qty, sendingOrder, canAdd)}
+      <strong class="checkout-item-price">${item ? billingAmount.format(item.price * line.qty) : '—'}</strong>
+    </li>`;
+  }).join('');
+}
+function checkoutBilling(bill, menu) {
+  const row = (label, value, hint = '', kind = '') => `<div class="billing-row ${kind}">
+    <dt>${label}${hint ? `<small>${hint}</small>` : ''}</dt><dd>${value}</dd>
+  </div>`;
+  return `<dl class="checkout-bill checkout-card">
+    ${row('Item total', billingAmount.format(bill.subtotal))}
+    ${bill.discount ? row('Early-bird discount', '−' + billingAmount.format(bill.discount), `${menu.discount}% off eligible items`, 'billing-discount') : ''}
+    ${row('Delivery', billingAmount.format(bill.delivery), 'One fee per delivery')}
+    ${row('Platform fee', billingAmount.format(bill.platformFee))}
+    ${row('Packing fee', billingAmount.format(bill.packingFee))}
+    ${row(`Estimated tax (${bill.taxRate}%)`, billingAmount.format(bill.tax), `On ${billingAmount.format(bill.taxable)}`)}
+    ${row('To pay', billingAmount.format(bill.total), '', 'billing-total')}
+  </dl>`;
+}
+function renderCheckout() {
+  if (!onCheckout()) return;
+  const container = byId('checkout-content');
+  const list = lines();
+  const menu = active();
+  const site = state.site;
+  if (!list.length) {
+    container.innerHTML = `<section class="checkout-card checkout-empty">
+      <span class="empty-icon">${icon('bag')}</span><h2>Your cart is empty</h2><p>${clean(checkoutError || 'Add a dish from the menu to check out.')}</p>
+      <a class="primary" href="/#menu" data-action="back-to-menu">Browse the menu ${icon('arrow')}</a>
+    </section>`;
+    return;
+  }
+  let bill;
+  let issue = state.menuError;
+  if (menu) {
+    try { bill = quote(list, menu); } catch (error) { issue = error.message; }
+  }
+  const firstDish = Object.hasOwn(dishes, list[0].id) ? list[0].id : 'thali';
+  const day = dateName(state.date);
+  const arrivalDay = day === 'Today' || day === 'Tomorrow' ? day.toLowerCase() : day;
+  const error = checkoutError || issue;
+  const busy = sendingOrder ? 'disabled' : '';
+  container.innerHTML = `<div class="checkout-layout">
+    <div class="checkout-contents">
+      <section class="checkout-card meal-summary" aria-labelledby="checkout-meal">
+        <div class="meal-summary-head">
+          <img src="/images/${firstDish}.webp" alt="" width="52" height="52">
+          <div><h2 id="checkout-meal">${mealNames[state.meal]}</h2><p>${day} · ${dayFormatter.format(new Date(state.date + 'T12:00:00Z'))}</p></div>
+        </div>
+        <ul class="checkout-items">${checkoutItems(list, menu)}</ul>
+        ${checkoutSides(menu).length ? `<button type="button" class="checkout-addons" id="checkout-addons" data-action="checkout-addons" ${busy}>
+          ${icon('plus')} <span><strong>Add-ons</strong><small>Browse sides for this meal</small></span>${icon('right')}
+        </button>` : ''}
+        ${bill?.discount ? `<div class="meal-summary-discount"><span>${icon('clock')} Early-bird discount (${menu.discount}%)</span><strong>−${billingAmount.format(bill.discount)}</strong></div>` : ''}
+        <div class="meal-summary-subtotal">
+          <a class="text-button" href="/#menu" data-action="back-to-menu">${icon('plus')} Add more</a>
+          ${bill ? `<div><small>Meal subtotal</small><strong>${billingAmount.format(bill.subtotal - bill.discount)}</strong></div>` : ''}
+        </div>
+        ${menu && menu.phase !== 'closed' ? `<div class="checkout-arrival">${icon('clock')}<span>Arrives ${arrivalDay}</span><strong>${arrivalWindow(menu)} <small>IST</small></strong></div>` : ''}
+      </section>
+      <section class="checkout-section" aria-labelledby="checkout-delivery">
+        <h2 id="checkout-delivery">Delivery details</h2>
+        <div class="checkout-card delivery-card">
+          <span class="checkout-location-icon">${icon('pin')}</span>
+          <div>
+            <strong>${site ? clean(site.name) : 'Choose a delivery location'}</strong>${site ? ` <span class="delivery-type">${site.type}</span>` : ''}
+            <p>${site ? `${clean(state.detail)}<br>${clean(site.area)}` : 'Select a DailyDish apartment, school, or office.'}</p>
+          </div>
+          <button type="button" class="outline" data-action="checkout-location" ${busy}>${site ? 'Change' : 'Choose location'}</button>
+        </div>
+      </section>
+      <section class="checkout-section" aria-labelledby="checkout-savings">
+        <h2 id="checkout-savings">Apply &amp; save</h2>
+        <div class="checkout-card wallet-card">
+          ${icon('wallet')} <span><strong>Wallet credit</strong><small>Unavailable in this demo</small></span>
+        </div>
+        ${bill?.missed ? `<p class="cart-promo checkout-missed">${icon('clock')} You could have saved ${money(bill.missed)} by ordering before ${timeLabel(menu.cutoff)}.</p>` : ''}
+      </section>
+    </div>
+    <section class="checkout-section checkout-summary" aria-labelledby="checkout-billing">
+      <h2 id="checkout-billing">Billing details</h2>
+      ${bill ? `${checkoutBilling(bill, menu)}<div class="checkout-card checkout-nutrition"><strong>Cart nutrition</strong>${nutrient(bill.protein, bill.fiber, bill)}</div>`
+        : `<div class="checkout-card checkout-bill-placeholder"><p>${issue ? 'Update your cart to continue.' : 'Updating your bill…'}</p>${state.menuError ? '<button type="button" class="outline" data-action="reload">Try again</button>' : ''}</div>`}
+      ${error ? `<p class="checkout-error form-error" id="checkout-error" role="alert" tabindex="-1">${clean(error)}</p>` : ''}
+    </section>
+  </div>
+  <div class="checkout-payment">
+    <div class="checkout-wrap checkout-payment-inner">
+      <div class="checkout-payment-total"><span>To pay</span><strong>${bill ? billingAmount.format(bill.total) : '—'}</strong></div>
+      <div class="checkout-payment-action">
+        <button id="place-order" type="button" class="primary" data-action="place-order" ${!bill || sendingOrder ? 'disabled' : ''}>${sendingOrder ? 'Placing order…' : site ? 'Place demo order' : 'Choose delivery location'}</button>
+        <small>No payment will be taken.</small>
+      </div>
+    </div>
+  </div>`;
+}
+function showCheckoutAddons() {
+  const menu = active();
+  const sides = checkoutSides(menu);
+  if (!sides.length || sendingOrder) return;
+  showModal('checkout-addons', 'Add-ons', `<div class="dialog-body addon-list">${sides.map(entry => {
+    const item = dishes[entry.id];
+    const price = preorderPrice(entry.price, menu.phase === 'preorder' ? menu.discount : 0);
+    return `<div class="addon-item"><div><strong>${item.name}</strong>${nutrient(item.protein, item.fiber)}</div>
+      <button type="button" class="add" data-action="add-checkout-side" data-value="${entry.id}" aria-label="Add ${item.name}">${money(price)} ${icon('plus')}</button></div>`;
+  }).join('')}</div>`);
+}
+async function placeOrder() {
+  if (sendingOrder || !onCheckout() || !active()) return;
+  if (!state.site) return chooseSite('checkout');
+  const menu = active();
+  let bill;
+  try { bill = quote(lines(), menu); } catch (error) {
+    checkoutError = error.message;
+    renderCheckout();
+    return;
+  }
+  const key = scope();
+  const expected = { site: state.site.id, detail: state.detail, date: state.date, meal: state.meal, lines: lines(), expectedTotal: bill.total, expectedPhase: menu.phase };
   const fingerprint = JSON.stringify(expected);
   if (pendingRequest?.fingerprint !== fingerprint) pendingRequest = { fingerprint, id: globalThis.crypto.randomUUID() };
-  showModal('checkout', 'Review your order', `<div class="dialog-body">
-    <p><strong>${mealNames[meal]} · ${dateName(date)}</strong><br>${state.site.name} · ${clean(state.detail)}<br>Arrives ${timeLabel(menu.arrivalStart)} – ${timeLabel(menu.arrivalEnd)} IST</p>
-    ${bill.items.map(item => {
-      const quantity = !item.packSize || item.qty > 1 ? `${item.qty} × ` : '';
-      return `<div class="cart-line"><div><strong>${quantity}${clean(orderItemName(item))}</strong>${item.description ? `<p>${clean(item.description)}</p>` : ''}</div><strong>${money(item.price * item.qty)}</strong></div>`;
-    }).join('')}
-    <p class="cart-footnote">Cart nutrition</p>${nutrient(bill.protein, bill.fiber, bill)}
-    ${bill.missed ? `<div class="cart-promo">${icon('clock')} You could have saved ${money(bill.missed)} by ordering before ${timeLabel(menu.cutoff)}</div>` : ''}
-    <div class="details"><div><span>Item total</span><strong>${money(bill.subtotal)}</strong></div>
-      ${bill.discount ? `<div><span>Early-bird savings (${menu.discount}%)</span><strong>−${money(bill.discount)}</strong></div>` : ''}
-      <div><span>Delivery</span><span>${money(bill.delivery)}</span></div>
-      <div><span>Estimated tax</span><span>${money(bill.tax)}</span></div>
-      <div class="final"><strong>Total</strong><strong>${money(bill.total)}</strong></div>
-    </div>
-    <p>Demo checkout. No payment will be taken.</p>
-    <p id="order-error" class="form-error" role="alert" hidden></p>
-    <button id="place-order" class="primary full" type="button">Place demo order</button>
-  </div>`);
-  byId('place-order').addEventListener('click', async event => {
-    if (sendingOrder) return;
-    sendingOrder = true;
-    const button = event.currentTarget;
-    button.disabled = true;
-    button.textContent = 'Placing order…';
-    try {
-      const order = await api('/api/order', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...expected, requestId: pendingRequest.id }),
-      });
-      pendingRequest = null;
-      replaceLines([]);
-      showModal('success', 'Demo order placed', `<div class="dialog-body"><p><strong>Order ${clean(order.reference)}</strong><br>${mealNames[order.meal]} · ${dateName(order.date)} · ${money(order.total)}</p><p>No payment was taken.</p><button type="button" class="primary full" data-action="close">Back to the menu</button></div>`);
-      void loadMenu({ silent: true });
-    } catch (error) {
-      await loadMenu({ silent: true });
-      if (modalType === 'checkout' && byId('order-error')) {
-        byId('order-error').hidden = false;
-        byId('order-error').textContent = error.message;
-        button.textContent = 'Review updated cart';
-        button.removeAttribute('id');
-        button.dataset.action = 'checkout';
-        button.replaceWith(button.cloneNode(true));
-        modal.querySelector('[data-action="checkout"]').disabled = false;
-      }
-    } finally {
-      sendingOrder = false;
-    }
-  });
+  sendingOrder = true;
+  checkoutError = '';
+  renderCheckout();
+  try {
+    const order = await api('/api/order', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...expected, requestId: pendingRequest.id }),
+    });
+    pendingRequest = null;
+    replaceLines([], key);
+    if (onCheckout()) history.replaceState(null, '', '/#menu');
+    showRoute();
+    renderCart();
+    showModal('success', 'Demo order placed', `<div class="dialog-body"><p><strong>Order ${clean(order.reference)}</strong><br>${mealNames[order.meal]} · ${dateName(order.date)} · ${money(order.total)}</p><p>No payment was taken.</p><button type="button" class="primary full" data-action="browse">Back to the menu</button></div>`);
+    void loadMenu({ silent: true });
+  } catch (error) {
+    checkoutError = error.message;
+    await loadMenu({ silent: true });
+  } finally {
+    sendingOrder = false;
+    renderCheckout();
+    byId('checkout-error')?.focus();
+  }
 }
 function info() {
   showModal('how', 'How preordering works', `<div class="dialog-body">
@@ -546,11 +739,26 @@ const actions = {
   plus: (value, button) => adjust(Number(value), 1, button),
   minus: (value, button) => adjust(Number(value), -1, button),
   checkout,
+  'back-to-menu': backToMenu,
+  'checkout-location': () => chooseSite('checkout'),
+  'checkout-addons': showCheckoutAddons,
+  'add-checkout-side': value => {
+    if (put({ id: value, kind: 'standard' })) {
+      modal.close();
+      alertUser(`${dishes[value].name} added to your cart.`);
+      byId('checkout-addons')?.focus({ preventScroll: true });
+    }
+  },
+  'place-order': placeOrder,
   reload: () => loadMenu(),
 };
 document.addEventListener('click', event => {
   const button = event.target.closest('[data-action]');
-  if (button && !button.disabled) actions[button.dataset.action]?.(button.dataset.value, button);
+  const action = actions[button?.dataset.action];
+  if (action && !button.disabled) {
+    event.preventDefault();
+    action(button.dataset.value, button);
+  }
 });
 modal.addEventListener('cancel', event => { if (sendingOrder) event.preventDefault(); });
 byId('delivery-date').addEventListener('change', event => {
@@ -558,14 +766,35 @@ byId('delivery-date').addEventListener('change', event => {
   state.category = 'All dishes';
   void loadMenu();
 });
+window.addEventListener('popstate', () => {
+  const isCheckout = onCheckout();
+  if (!isCheckout && checkoutPage.hidden) return;
+  if (modal.open) modal.close();
+  const previousDate = state.date;
+  readCheckoutContext();
+  if (!isCheckout && state.date < localTime().date) state.date = localTime().date;
+  checkoutError = '';
+  showRoute();
+  if (!state.menus || state.date !== previousDate) void loadMenu({ first: !isCheckout });
+  else render();
+  (isCheckout ? byId('checkout-title') : byId('delivery-date')).focus({ preventScroll: true });
+});
 startHighlights();
-void loadMenu({ first: true });
+readCheckoutContext();
+showRoute();
+void loadMenu({ first: !onCheckout() });
 setInterval(() => {
   const today = localTime().date;
-  if (today > state.date && !modal.open) {
+  if (modal.open || sendingOrder) return;
+  if (onCheckout() && today > state.date) {
+    if (state.today !== today) {
+      state.today = today;
+      void loadMenu();
+    }
+  } else if (today > state.date) {
     state.date = today;
     void loadMenu({ first: true });
-  } else if (!modal.open) {
+  } else {
     void loadMenu({ silent: true });
   }
 }, 45000);

@@ -170,10 +170,14 @@ export function quote(lines, menu) {
   const savings = round(eligible * menu.discount / 100);
   const discount = menu.phase === 'preorder' ? savings : 0;
   const delivery = 9;
-  const tax = round((subtotal - discount + delivery) * 0.05);
+  const platformFee = 0;
+  const packingFee = 0;
+  const taxable = round(subtotal - discount + delivery + platformFee + packingFee);
+  const taxRate = 5;
+  const tax = round(taxable * taxRate / 100);
   return {
-    items, subtotal, discount, delivery, tax,
-    total: round(subtotal - discount + delivery + tax),
+    items, subtotal, discount, delivery, platformFee, packingFee, taxable, taxRate, tax,
+    total: round(taxable + tax),
     missed: menu.phase === 'late' ? savings : 0,
     ...sumNutrients(items),
     stock,
